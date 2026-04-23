@@ -1,4 +1,5 @@
 import streamlit as st
+import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
 from utils.queries import run_query
@@ -12,13 +13,16 @@ st.title(" Vue Executive")
 st.sidebar.header("Filtres")
 
 df = run_query("""
-SELECT t.*, tm.date_transaction
+SELECT t.*, tm.*, s.segment_client,a.nom_agence
 FROM transactions t
 JOIN temps tm ON t.temps_id = tm.temps_id
+JOIN comptes co ON t.compte_id = co.compte_id
+JOIN clients c ON co.client_id = c.client_id
+join segments s ON c.segment_id = s.segment_id 
+JOIN agences a ON t.agence_id = a.agence_id              
 """)
 
-df["date_transaction"] = pd.to_datetime(df["date_transaction"])
-
+df["date_transaction"] = pd.to_datetime(df["date_transaction"], errors="coerce")
 # filtre année pour analyse temporelle
 
 years = df["date_transaction"].dt.year.unique()
@@ -43,13 +47,35 @@ col4.metric("Marge moyenne", round(marge, 2))
 #  GRAPH EVOLUTION
 # ajout mois pour analyse temporelle 
 
-df["month"] = df["date_transaction"].dt.to_period("M").astype(str)
 
-line = df.groupby("month")["montant_eur"].sum().reset_index()
 
-fig = px.line(line, x="month", y="montant_eur", title="Evolution CA")
+#  Graph ligne
+st.subheader(" Évolution mensuelle")
 
-st.plotly_chart(fig, use_container_width=True)
+#transforme en tableau pour graphique(unstack)
+
+evolution = df.groupby(["mois", "type_operation"])["montant"].sum().unstack()
+
+st.line_chart(evolution)
+
+
+
+
+
+
+
+
+#  Graph bar
+st.subheader(" CA par agence")
+
+st.bar_chart(df.groupby("nom_agence")["montant"].sum())
+
+#  Pie chart
+st.subheader(" Répartition des segments")
+
+fig, ax = plt.subplots()
+df["segment_client"].value_counts().plot.pie(autopct='%1.1f%%', ax=ax)
+st.pyplot(fig)
 
 
 # Export CSV
@@ -60,3 +86,5 @@ st.download_button(
     "data.csv",
     "text/csv"
 )
+
+
